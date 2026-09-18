@@ -1,11 +1,9 @@
-/* Made by Hotchkiss_Chronoshii */
-/* Note to self: this is a prototype source code and may need alterations */
 'use strict';
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)], uid=()=>Math.random().toString(36).slice(2,10);
 const DB='galaxyVirtusDB', STORE='app', KEY='state', ADMIN_CODE='virtus25';
 const FIREBASE_CONFIG={apiKey:'AIzaSyBRQ_UztF2lwcX81RVinv-5FBaumAclAuk',authDomain:'schungdar.firebaseapp.com',databaseURL:'https://schungdar-default-rtdb.firebaseio.com',projectId:'schungdar',storageBucket:'schungdar.firebasestorage.app',messagingSenderId:'448271329140',appId:'1:448271329140:web:a69f2a5574d243e800ae21'};
-let cloudRef=null, cloudReady=false, cloudApplying=false;
-let state={territories:[]}, admin=false, filter='territory', pendingFlag=null, editorHidden=false, borderEditing=null, boundaryMode=null, tool=null, session=null, editingId=null, currentEditor=null;
+let cloudRef=null, dateRef=null, cloudReady=false, cloudApplying=false;
+let state={territories:[],dateLabel:'5000 SGY'}, admin=false, filter='territory', pendingFlag=null, editorHidden=false, borderEditing=null, boundaryMode=null, tool=null, session=null, editingId=null, currentEditor=null;
 let undoStack=[], editorUndoRecorded=false, activeTerritoryId=null, pureMap=false;
 const view={z:1,tx:0,ty:0}; let natural={w:0,h:0};
 const viewport=$('#viewport'), world=$('#world'), map=$('#map'), overlay=$('#overlay'), terrG=$('#territories'), previewG=$('#preview'), editG=$('#editHandles');
@@ -16,25 +14,23 @@ async function writeState(){try{const d=await db();await new Promise((res,rej)=>
 const save=(()=>{let t;return()=>{clearTimeout(t);t=setTimeout(()=>{writeState();pushCloud()},180)}})();
 function pushCloud(){
   if(!cloudReady||cloudApplying||!cloudRef)return;
-  cloudRef.set(state.territories).then(()=>$('#storage').textContent='CLOUD SAVED · INDEXEDDB SAVED').catch(()=>$('#storage').textContent='LOCAL ONLY');
+  Promise.all([cloudRef.set(state.territories),dateRef?.set(state.dateLabel||'5000 SGY')]).then(()=>$('#storage').textContent='CLOUD SAVED · INDEXEDDB SAVED').catch(()=>$('#storage').textContent='LOCAL ONLY');
 }
 async function startCloud(){
   if(typeof firebase==='undefined'||!firebase.initializeApp){$('#storage').textContent='LOCAL ONLY';return}
   try{
     const app=firebase.apps?.find(a=>a.name==='project-starlight')||firebase.initializeApp(FIREBASE_CONFIG,'project-starlight');
-    cloudRef=firebase.database(app).ref('project-starlight/boards/main/territories');
-    const snap=await cloudRef.once('value'); const remote=snap.val();
+    cloudRef=firebase.database(app).ref('project-starlight/boards/main/territories');dateRef=cloudRef.parent.child('dateLabel');
+    const snap=await cloudRef.once('value'); const remote=snap.val();const ds=await dateRef.once('value');if(ds.val())state.dateLabel=ds.val();$('#dateInput').value=state.dateLabel||'5000 SGY';
     if(Array.isArray(remote)&&remote.length){
       const merged=new Map(state.territories.map(t=>[t.id,t]));
       remote.forEach(t=>{const old=merged.get(t.id);if(!old||(t.placedAt||0)>=(old.placedAt||0))merged.set(t.id,t)});
       state.territories=[...merged.values()]; normalizeTerritories(); await writeState();
     } else if(state.territories.length) await cloudRef.set(state.territories);
-    cloudRef.on('value',s=>{const v=s.val();if(!Array.isArray(v))return;const local=new Map(state.territories.map(t=>[t.id,t]));v.forEach(t=>{const old=local.get(t.id);if(!old||(t.updatedAt||t.placedAt||0)>(old.updatedAt||old.placedAt||0))local.set(t.id,t)});state.territories=[...local.values()];normalizeTerritories();if(currentEditor)currentEditor=state.territories.find(t=>t.id===currentEditor.id)||null;writeState();render();}); cloudReady=true;
+    cloudRef.on('value',s=>{const v=s.val();if(!Array.isArray(v))return;const local=new Map(state.territories.map(t=>[t.id,t]));v.forEach(t=>{const old=local.get(t.id);if(!old||(t.updatedAt||t.placedAt||0)>(old.updatedAt||old.placedAt||0))local.set(t.id,t)});state.territories=[...local.values()];normalizeTerritories();if(currentEditor)currentEditor=state.territories.find(t=>t.id===currentEditor.id)||null;writeState();render();});dateRef.on('value',s=>{if(s.val()){state.dateLabel=s.val();$('#dateInput').value=s.val();writeState()}}); cloudReady=true;
     $('#storage').textContent='CLOUD CONNECTED'; notice('CLOUD BOARD CONNECTED');
   }catch(e){console.warn('Cloud sync unavailable',e);$('#storage').textContent='LOCAL ONLY'}
 }
-
-/* Whoever is reading this SC, I apologize, I hate to have bjillions of lines. I am very disorganized */
 function stateSnapshot(){return JSON.parse(JSON.stringify(state.territories||[]))}
 function remember(){undoStack.push(stateSnapshot());if(undoStack.length>50)undoStack.shift();$('#undoBtn').disabled=false}
 function undo(){if(!undoStack.length)return;state.territories=undoStack.pop();currentEditor=null;$('#editor').classList.add('hidden');session=null;boundaryMode=null;editingId=null;save();render();notice('LAST CHANGE UNDONE')}
@@ -127,8 +123,8 @@ viewport.addEventListener('dblclick',e=>{if(session&&tool==='polygon'){e.prevent
 $('#zoomIn').onclick=()=>zoomAt(viewport.clientWidth/2,viewport.clientHeight/2,1.25);$('#zoomOut').onclick=()=>zoomAt(viewport.clientWidth/2,viewport.clientHeight/2,.8);$('#zoomReadout').onclick=()=>{view.z=1;view.tx=(viewport.clientWidth-natural.w)/2;view.ty=(viewport.clientHeight-natural.h)/2;apply()};
 function doneBoundaryMode(){boundaryMode=null;editingId=null;activeTerritoryId=null;tool=null;session=null;viewport.classList.remove('drawing');syncTools();render();notice('TERRITORY EDIT MODE FINISHED')}
 function togglePureMap(){pureMap=!pureMap;$('#pureMapBtn').textContent=pureMap?'SHOW TERRITORIES':'PURE MAP';$('#pureMapBtn').classList.toggle('active',pureMap);if(pureMap){closeEditor();tool=null;boundaryMode=null;session=null}render();syncTools()}
-function init(){map.onload=()=>{natural={w:map.naturalWidth,h:map.naturalHeight};fit()};map.src=map.src;readState().then(async s=>{if(s?.territories)state=s;normalizeTerritories();render();await startCloud();});syncTools();syncFilter()}
-$('#undoBtn').onclick=undo;$('#adminBtn').onclick=toggleAdmin;$('#unlockCode').onclick=unlockAdmin;$('#cancelCode').onclick=()=>$('#modal').classList.add('hidden');$('#codeInput').onkeydown=e=>{if(e.key==='Enter')unlockAdmin()};$('#territoryView').onclick=()=>setFilter('territory');document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName||'')){e.preventDefault();undo()}});$('#editorToggle').onclick=()=>{editorHidden=!editorHidden;if(editorHidden)closeEditor();syncTools();};$('#flagInput').onchange=e=>{const f=e.target.files[0];if(!f||!currentEditor)return;ensureEditorUndo();const r=new FileReader();r.onload=()=>{pendingFlag=r.result;currentEditor.flag=pendingFlag;currentEditor.placedAt=Date.now();$('#flagPreview').src=pendingFlag;$('#flagPreview').classList.remove('hidden');save();render();notice('FLAG SAVED')};r.readAsDataURL(f)};
+function init(){map.onload=()=>{natural={w:map.naturalWidth,h:map.naturalHeight};fit()};map.src=map.src;readState().then(async s=>{if(s?.territories)state=s;state.dateLabel ||= '5000 SGY';$('#dateInput').value=state.dateLabel;normalizeTerritories();render();await startCloud();});syncTools();syncFilter()}
+$('#undoBtn').onclick=undo;$('#adminBtn').onclick=toggleAdmin;$('#unlockCode').onclick=unlockAdmin;$('#cancelCode').onclick=()=>$('#modal').classList.add('hidden');$('#codeInput').onkeydown=e=>{if(e.key==='Enter')unlockAdmin()};$('#dateInput').oninput=()=>{state.dateLabel=$('#dateInput').value.slice(0,24)||'5000 SGY';save();pushCloud()};$('#territoryView').onclick=()=>setFilter('territory');document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName||'')){e.preventDefault();undo()}});$('#editorToggle').onclick=()=>{editorHidden=!editorHidden;if(editorHidden)closeEditor();syncTools();};$('#flagInput').onchange=e=>{const f=e.target.files[0];if(!f||!currentEditor)return;ensureEditorUndo();const r=new FileReader();r.onload=()=>{pendingFlag=r.result;currentEditor.flag=pendingFlag;currentEditor.placedAt=Date.now();$('#flagPreview').src=pendingFlag;$('#flagPreview').classList.remove('hidden');save();render();notice('FLAG SAVED')};r.readAsDataURL(f)};
 $$('#toolPalette button').forEach(b=>b.onclick=()=>{requireAdmin(()=>{filter='territory';tool=b.dataset.tool;syncFilter();syncTools();notice(tool==='lasso'?'DRAG TO DRAW TERRITORY':'CLICK POINTS, DOUBLE-CLICK TO FINISH')})});
 $('#factionInput').oninput=()=>{if(currentEditor&&!$('#factionInput').disabled){ensureEditorUndo();currentEditor.faction=$('#factionInput').value.trim()||'UNASSIGNED';currentEditor.placedAt=Date.now();currentEditor.updatedAt=Date.now();save();render()}};$('#colorInput').oninput=()=>{if(currentEditor&&!$('#colorInput').disabled){ensureEditorUndo();currentEditor.color=$('#colorInput').value;setEditorAccent(currentEditor.color);currentEditor.placedAt=Date.now();currentEditor.updatedAt=Date.now();save();render()}};$('#noteInput').oninput=()=>{if(currentEditor&&!$('#noteInput').disabled){ensureEditorUndo();currentEditor.note=$('#noteInput').value;currentEditor.placedAt=Date.now();save()}};
 $('#addModeBtn').onclick=()=>{const t=state.territories.find(x=>x.id===activeTerritoryId)||currentEditor;if(t)beginBoundaryEdit(t,'add');else notice('SELECT A TERRITORY FIRST')};$('#eraseModeBtn').onclick=()=>{const t=state.territories.find(x=>x.id===activeTerritoryId)||currentEditor;if(t)beginBoundaryEdit(t,'erase');else notice('SELECT A TERRITORY FIRST')};$('#doneModeBtn').onclick=doneBoundaryMode;$('#pureMapBtn').onclick=togglePureMap;$('#addBorderArea').onclick=()=>currentEditor&&beginBoundaryEdit(currentEditor,'add');$('#eraseBorderArea').onclick=()=>currentEditor&&beginBoundaryEdit(currentEditor,'erase');$('#editorClose').onclick=closeEditor;$('#deleteTerritory').onclick=()=>requireAdmin(deleteCurrent);$('#saveTerritory').onclick=()=>{if(!currentEditor)return;currentEditor.faction=$('#factionInput').value.trim()||'UNASSIGNED';currentEditor.color=$('#colorInput').value;currentEditor.note=$('#noteInput').value.trim();if(pendingFlag)currentEditor.flag=pendingFlag;currentEditor.placedAt=Date.now();currentEditor.updatedAt=Date.now();save();render();notice('TERRITORY SAVED');};$('#fitBtn').onclick=fit;$('#resetBtn').onclick=()=>{view.z=1;fit();};$('#exportBtn').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(state,null,2)],{type:'application/json'}));a.download='galaxy-territories.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),500)};
