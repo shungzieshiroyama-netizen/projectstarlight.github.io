@@ -1,3 +1,5 @@
+/* Made by Hotchkiss_Chronoshii */
+/* Note to self: this is a prototype source code and may need alterations */
 'use strict';
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)], uid=()=>Math.random().toString(36).slice(2,10);
 const DB='galaxyVirtusDB', STORE='app', KEY='state', ADMIN_CODE='virtus25';
@@ -31,6 +33,8 @@ async function startCloud(){
     $('#storage').textContent='CLOUD CONNECTED'; notice('CLOUD BOARD CONNECTED');
   }catch(e){console.warn('Cloud sync unavailable',e);$('#storage').textContent='LOCAL ONLY'}
 }
+
+/* Whoever is reading this SC, I apologize, I hate to have bjillions of lines. I am very disorganized */
 function stateSnapshot(){return JSON.parse(JSON.stringify(state.territories||[]))}
 function remember(){undoStack.push(stateSnapshot());if(undoStack.length>50)undoStack.shift();$('#undoBtn').disabled=false}
 function undo(){if(!undoStack.length)return;state.territories=undoStack.pop();currentEditor=null;$('#editor').classList.add('hidden');session=null;boundaryMode=null;editingId=null;save();render();notice('LAST CHANGE UNDONE')}
