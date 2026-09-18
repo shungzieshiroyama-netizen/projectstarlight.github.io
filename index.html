@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PROJECT STARLIGHT // GALACTIC TERRITORY COMMAND</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="seal">✦</span><span><b>PROJECT STARLIGHT</b><small>GALACTIC TERRITORY COMMAND</small></span></div>
+  <div class="divider"></div>
+  <button id="territoryView" class="tool active">⬡ TERRITORIES</button><button id="adminBtn" class="tool">🔒 UNLOCK EDITING</button><button id="undoBtn" class="tool" title="Undo last territory change">↶ UNDO</button>
+  <button id="editorToggle" class="tool">HIDE EDITOR</button><button id="pureMapBtn" class="tool">PURE MAP</button>
+  <div class="spacer"></div>
+  <button id="zoomOut" class="tool">−</button><button id="zoomReadout" class="tool">100%</button><button id="zoomIn" class="tool">＋</button><button id="fitBtn" class="tool">FIT</button><button id="resetBtn" class="tool">RESET</button>
+  <button id="exportBtn" class="tool">EXPORT</button>
+</header>
+<main>
+  <section id="viewport">
+    <div id="world">
+      <img id="map" src="assets/galaxy-map.png" draggable="false" alt="Spatium Majoris galaxy map">
+      <svg id="overlay" aria-label="Faction territory overlay"><g id="territories"></g><g id="preview"></g><g id="editHandles"></g></svg>
+    </div>
+    <div class="hud"><span id="coords">X 0 · Y 0</span><span id="zoom">100%</span></div>
+    <div id="notice" class="notice hidden"></div>
+    <div id="editor" class="editor hidden">
+      <div class="editor-title"><span id="editorTitle">FACTION TERRITORY</span><button id="editorClose">×</button></div>
+      <label>FACTION NAME<input id="factionInput" maxlength="40" placeholder="e.g. ORION CONSORTIUM"></label>
+      <label>FACTION COLOR<input id="colorInput" type="color" value="#b388ff"></label>
+      <label>FLAG / EMBLEM<input id="flagInput" type="file" accept="image/*"><img id="flagPreview" class="flag-preview hidden" alt="Flag preview"></label>
+      <label>NOTE<textarea id="noteInput" maxlength="140" placeholder="Optional territory note…"></textarea></label>
+      <div class="editor-actions"><button id="addBorderArea">ADD AREA</button><button id="eraseBorderArea">ERASE AREA</button></div><div class="editor-actions"><button id="saveTerritory" class="primary">SAVE TERRITORY</button><button id="deleteTerritory" class="danger">DELETE</button></div>
+    </div>
+    <div id="toolPalette" class="palette"><b>FACTION TERRITORY EDITOR</b><button id="addModeBtn">＋ ADD MODE</button><button id="eraseModeBtn">− ERASE MODE</button><button id="doneModeBtn" class="done">✓ DONE</button><button data-tool="lasso">⌁ STANDARD LASSO</button><button data-tool="polygon">⬡ POLYGONAL LASSO</button><span>Choose a mode to make repeated edits, then press DONE.</span></div>
+  </section>
+  <aside>
+    <div class="side-head"><span>OPERATIONS BOARD</span><i id="count">0</i></div>
+    <div class="side-copy">Define and identify the nations that control each region of the galaxy.</div>
+    <div class="legend"><span class="dot terr"></span> FACTION CONTROL<br><small>Click a region to inspect its nation.</small></div>
+    <div class="side-head territories-head"><span>FACTION TERRITORIES</span><i id="status">VIEWING</i></div>
+    <div id="territoryList" class="territory-list"><div class="empty">NO TERRITORIES DEFINED</div></div>
+  </aside>
+</main>
+<footer><span>SPATIUM MAJORIS · 5000 STG</span><span>SOFTWARE MADE BY: HOTCHKISS_CHRONOSHII (SCHUNGZIE_ROSE) · MAP MADE BY: ZIPZEB THE ASTRONOMER</span><span id="storage">LOCAL CACHE READY</span></footer>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<div id="modal" class="hidden"><div class="modal-card"><h3>EDITING ACCESS</h3><p>Enter the Project Starlight editing code to create, modify, or delete territories.</p><input id="codeInput" type="password" placeholder="ACCESS CODE"><div><button id="cancelCode">CANCEL</button><button id="unlockCode" class="primary">UNLOCK</button></div></div></div>
+<script src="vendor/polygon-clipping.js"></script>
+<script src="app.js"></script>
+</body></html>
