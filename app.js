@@ -4,7 +4,7 @@ const DB='galaxyVirtusDB', STORE='app', KEY='state', ADMIN_CODE='virtus25';
 const FIREBASE_CONFIG={apiKey:'AIzaSyBRQ_UztF2lwcX81RVinv-5FBaumAclAuk',authDomain:'schungdar.firebaseapp.com',databaseURL:'https://schungdar-default-rtdb.firebaseio.com',projectId:'schungdar',storageBucket:'schungdar.firebasestorage.app',messagingSenderId:'448271329140',appId:'1:448271329140:web:a69f2a5574d243e800ae21'};
 let cloudRef=null, dateRef=null, cloudReady=false, cloudApplying=false;
 let state={territories:[],dateLabel:'5000 SGY'}, admin=false, filter='territory', pendingFlag=null, editorHidden=false, borderEditing=null, boundaryMode=null, tool=null, session=null, editingId=null, currentEditor=null;
-let undoStack=[], editorUndoRecorded=false, activeTerritoryId=null, pureMap=false;
+let undoStack=[], editorUndoRecorded=false, activeTerritoryId=null, pureMap=false, suppressTerritoryClick=false;
 const view={z:1,tx:0,ty:0}; let natural={w:0,h:0};
 const viewport=$('#viewport'), world=$('#world'), map=$('#map'), overlay=$('#overlay'), terrG=$('#territories'), previewG=$('#preview'), editG=$('#editHandles');
 let dbPromise;
@@ -58,13 +58,22 @@ function territoriesOverlap(a,b){return territoryShapes(a).some(x=>territoryShap
 function consumeOverlaps(owner, shapes){for(const old of state.territories){if(old.id===owner.id)continue;if(shapes.some(shape=>territoryShapes(old).some(existing=>polysOverlap(shape,existing)))){old.erasures ||= [];for(const shape of shapes)old.erasures.push(shape.map(p=>({x:p.x,y:p.y})));}}}
 function centerOf(points){let a=0,x=0,y=0;for(let i=0;i<points.length;i++){const p=points[i],q=points[(i+1)%points.length],cross=p.x*q.y-q.x*p.y;a+=cross;x+=(p.x+q.x)*cross;y+=(p.y+q.y)*cross}if(Math.abs(a)<.001)return points.reduce((r,p)=>({x:r.x+p.x/points.length,y:r.y+p.y/points.length}),{x:0,y:0});return{x:x/(3*a),y:y/(3*a)}}
 function newerThan(a,b){return (a.placedAt||0)>(b.placedAt||0)}
+function translateGeometry(g,dx,dy){return g.map(poly=>poly.map(ring=>ring.map(p=>[p[0]+dx,p[1]+dy])))}
+function startTerritoryDrag(e,t,el){
+  if(!admin||e.button!==0)return;
+  e.stopPropagation();e.preventDefault();const start=mapPoint(e), original=JSON.parse(JSON.stringify(t.geometry)), before=stateSnapshot();let moved=false;
+  el.setPointerCapture(e.pointerId);
+  const move=ev=>{const p=mapPoint(ev),dx=p.x-start.x,dy=p.y-start.y;if(!moved&&Math.hypot(dx,dy)<4/view.z)return;moved=true;t.geometry=translateGeometry(original,dx,dy);el.setAttribute('d',geomPath(t.geometry));};
+  const up=()=>{el.removeEventListener('pointermove',move);el.removeEventListener('pointerup',up);if(moved){undoStack.push(before);if(undoStack.length>50)undoStack.shift();$('#undoBtn').disabled=false;t.updatedAt=Date.now();t.placedAt=t.updatedAt;for(const other of state.territories){if(other.id!==t.id)try{other.geometry=polygonClipping.difference(other.geometry,t.geometry)}catch{}}state.territories=state.territories.filter(x=>x.geometry?.length);save();render();suppressTerritoryClick=true;setTimeout(()=>suppressTerritoryClick=false,80);notice('TERRITORY MOVED')}else{openEditor(t)}};
+  el.addEventListener('pointermove',move);el.addEventListener('pointerup',up);
+}
 function render(){
   overlay.classList.toggle('hidden',pureMap);
   terrG.innerHTML=''; previewG.innerHTML=''; editG.innerHTML='';
   const visible=state.territories.filter(t=>!t.hidden);
-  for(const t of visible){if(!t.geometry?.length)continue;const p=document.createElementNS('http://www.w3.org/2000/svg','path');p.classList.add('territory');if(currentEditor?.id===t.id)p.classList.add('selected');p.dataset.id=t.id;p.setAttribute('d',geomPath(t.geometry));p.setAttribute('fill',t.color||'#b388ff');p.setAttribute('fill-opacity','.28');p.setAttribute('stroke',t.color||'#b388ff');p.setAttribute('stroke-width','2');
+  for(const t of visible){if(!t.geometry?.length)continue;const p=document.createElementNS('http://www.w3.org/2000/svg','path');p.classList.add('territory');if(currentEditor?.id===t.id)p.classList.add('selected');p.dataset.id=t.id;p.setAttribute('d',geomPath(t.geometry));p.setAttribute('pointer-events','all');p.setAttribute('fill',t.color||'#b388ff');p.setAttribute('fill-opacity','.28');p.setAttribute('stroke',t.color||'#b388ff');p.setAttribute('stroke-width','2');
     const later=visible.filter(o=>o.id!==t.id&&newerThan(o,t));if(later.length||(t.erasures||[]).length){const mask=document.createElementNS('http://www.w3.org/2000/svg','mask');mask.id='m'+t.id;const white=document.createElementNS('http://www.w3.org/2000/svg','path');white.setAttribute('d',geomPath(t.geometry));white.setAttribute('fill','white');mask.appendChild(white);(t.erasures||[]).forEach(a=>{const hole=document.createElementNS('http://www.w3.org/2000/svg','path');hole.setAttribute('d',path(a));hole.setAttribute('fill','black');mask.appendChild(hole)});later.forEach(o=>{const hole=document.createElementNS('http://www.w3.org/2000/svg','path');hole.setAttribute('d',geomPath(o.geometry));hole.setAttribute('fill','black');mask.appendChild(hole)});terrG.appendChild(mask);p.setAttribute('mask',`url(#m${t.id})`)}
-    p.addEventListener('click',e=>{e.stopPropagation();if(admin)openEditor(t);else{currentEditor=t;showEditor(t,true)}});terrG.appendChild(p);
+    p.addEventListener('pointerdown',e=>{if(admin)startTerritoryDrag(e,t,p);else e.stopPropagation()});p.addEventListener('click',e=>{e.stopPropagation();if(suppressTerritoryClick)return;if(admin)openEditor(t);else{currentEditor=t;showEditor(t,true)}});terrG.appendChild(p);
     const c=geomCenter(t.geometry);
     if(t.flag){const fi=document.createElementNS('http://www.w3.org/2000/svg','image');fi.setAttribute('href',t.flag);fi.setAttribute('x',c.x-18);fi.setAttribute('y',c.y-38);fi.setAttribute('width','36');fi.setAttribute('height','22');fi.setAttribute('preserveAspectRatio','xMidYMid slice');fi.setAttribute('pointer-events','none');terrG.appendChild(fi)}
     const label=document.createElementNS('http://www.w3.org/2000/svg','text');label.classList.add('territory-label');label.setAttribute('x',c.x);label.setAttribute('y',c.y);label.setAttribute('fill',t.color||'#b388ff');label.textContent=(t.faction||'UNASSIGNED').toUpperCase();terrG.appendChild(label);
